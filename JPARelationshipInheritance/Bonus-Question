@@ -1,0 +1,79 @@
+BONUS QUESTIONS — JPA Lab
+==========================
+
+Q1. List 3 tasks that can be performed with native SQL but are hard or
+    impossible with JPQL.
+----------------------------------------------------------------------
+
+1. Database-specific functions and syntax
+   JPQL is database-agnostic and only supports a small set of standard
+   functions. Native SQL lets you use vendor-specific features such as:
+   - PostgreSQL: JSONB operators (data->'key'), ARRAY functions,
+     window functions (ROW_NUMBER() OVER (...)), or full-text search
+     with tsvector/tsquery.
+   - MySQL: GROUP_CONCAT(), FIND_IN_SET(), or DATE_FORMAT().
+   - Oracle: CONNECT BY for hierarchical queries (tree traversal),
+     LISTAGG(), or PIVOT/UNPIVOT.
+   Example: SELECT id, title, ROW_NUMBER() OVER (ORDER BY date DESC)
+            AS row_num FROM event;
+   This ranking window function has no JPQL equivalent.
+
+2. Bulk updates or deletes with JOINs
+   JPQL supports basic bulk UPDATE and DELETE, but it cannot perform
+   them across joined tables in a single statement. Native SQL allows:
+   DELETE FROM guest
+   WHERE event_id IN (SELECT id FROM event WHERE date < '2020-01-01');
+   In JPQL you would need to load entities into memory first (or use
+   multiple statements), which is far less efficient for large datasets.
+
+3. DDL and schema-level operations
+   JPQL operates entirely at the entity/object level — it cannot execute
+   Data Definition Language statements. Native SQL can perform:
+   - CREATE INDEX, DROP INDEX (e.g., adding a partial index for
+     performance tuning at runtime)
+   - ALTER TABLE (e.g., adding a column for a migration step)
+   - TRUNCATE TABLE (faster than DELETE for clearing tables)
+   - CREATE MATERIALIZED VIEW (for pre-aggregated reporting tables)
+   These are completely outside JPQL's scope.
+
+
+Q2. Explain why you might prefer native SQL over JPQL in real-world projects.
+------------------------------------------------------------------------------
+
+There are several scenarios where native SQL is the better pragmatic choice:
+
+a) Performance-critical queries
+   JPQL goes through Hibernate's query translation layer, which
+   sometimes generates suboptimal SQL — extra subqueries, missing
+   index hints, or inefficient joins. With native SQL you control
+   exactly what hits the database, which matters when optimising
+   slow queries on large production tables. A query plan review
+   (EXPLAIN ANALYZE) is much easier to act on when you wrote the
+   SQL yourself.
+
+b) Complex reporting and analytics
+   Business reporting often requires aggregations, pivoting, ranking
+   (window functions), or multi-step CTEs (WITH clauses). These are
+   either impossible or extremely awkward in JPQL. Writing them in
+   native SQL keeps the logic readable, maintainable, and easy to
+   test directly in a SQL client before embedding them in code.
+
+c) Legacy or shared databases
+   When Spring Boot connects to a database also used by other systems
+   (legacy applications, BI tools, ETL pipelines), the schema often
+   does not map cleanly to JPA entities — unusual column names,
+   composite keys, views, or stored procedures. Native SQL queries
+   let you interact with the database as-is without forcing a
+   problematic entity mapping on a schema you do not own.
+
+d) Database migrations and maintenance tasks
+   During deployment or data-migration scripts run via
+   @EventListener(ApplicationReadyEvent.class) or Flyway/Liquibase,
+   you often need to backfill data, reindex, or reshape existing rows.
+   Native SQL is the natural and correct tool for this — JPQL was
+   not designed for schema or data migration work.
+
+In summary: JPQL is ideal for day-to-day CRUD operations where
+portability and type safety matter. Native SQL is the right tool
+when you need full database power, maximum performance, or must
+work with structures that do not map naturally to JPA entities.
